@@ -1,18 +1,18 @@
-# Customer Service Agents Demo
+# Customer Service Agents Demo (TypeScript Version)
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![NextJS](https://img.shields.io/badge/Built_with-NextJS-blue)
 ![OpenAI API](https://img.shields.io/badge/Powered_by-OpenAI_API-orange)
 
-This repository contains a demo of a Customer Service interface built on top of the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/).
+This repository contains a TypeScript demo of a Customer Service interface built on top of the OpenAI Agents SDK.
 
 It is composed of two parts:
 
-1. A python backend that handles the agent orchestration logic, implementing the Agents SDK [customer service example](https://github.com/openai/openai-agents-python/tree/main/examples/customer_service)
+1. A TypeScript backend (`typescript-backend/`) that handles the agent orchestration logic.
 
 2. A Next.js UI allowing the visualization of the agent orchestration process and providing a chat interface. It uses [ChatKit](https://openai.github.io/chatkit-js/) to provide a high-quality chat interface.
 
-This fork also includes a `typescript-backend/` service with API-compatible endpoints for teams migrating backend logic from Python to TypeScript.
+This repo is intended as the TypeScript-first version of the original OpenAI customer service demo.
 
 ![Demo Screenshot](screenshot.jpg)
 
@@ -58,16 +58,6 @@ npm install
 
 You can either run the backend independently if you want to use a separate UI, or run both the UI and backend at the same time.
 
-#### Run the backend independently
-
-From the `python-backend` folder, run:
-
-```bash
-python -m uvicorn main:app --reload --port 8000
-```
-
-The backend will be available at: [http://localhost:8000](http://localhost:8000)
-
 #### Run the TypeScript backend independently
 
 From the `typescript-backend` folder, run:
@@ -78,6 +68,17 @@ npm run dev
 ```
 
 The TypeScript backend will be available at: [http://localhost:8000](http://localhost:8000)
+
+#### Optional: run the Python backend
+
+If you want to compare behavior against the original Python implementation, you can also run:
+
+```bash
+cd python-backend
+python -m uvicorn main:app --reload --port 8000
+```
+
+The backend will be available at: [http://localhost:8000](http://localhost:8000)
 
 #### Run the UI & backend simultaneously
 
@@ -181,6 +182,14 @@ This flow demonstrates how the system not only routes requests to the appropriat
    - The Refunds & Compensation Agent then uses `issue_compensation` to open a case, provide hotel and meal credits, and note ground transportation coverage.
 
 There are two mock itineraries so both scenarios continue to work: the disrupted Paris -> New York -> Austin trip (PA441/NY802 with rebook to NY950) and the existing on-time flight (FLT-123) used in the first two demo flows.
+
+## Codex Workshop Prompts
+
+This repository includes hands-on Codex workshop prompts under [`examples/`](examples):
+
+1. [`examples/01-understand/prompt.md`](examples/01-understand/prompt.md): understand agent routing, tools, and guardrail flow.
+2. [`examples/02-generate-tests/prompt.md`](examples/02-generate-tests/prompt.md): identify high-risk backend paths and add focused tests.
+3. [`examples/03-feature-scaffold/prompt.md`](examples/03-feature-scaffold/prompt.md): scaffold a new specialist agent feature in repo style.
 
 ## Contributing
 
