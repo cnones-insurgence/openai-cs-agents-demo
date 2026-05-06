@@ -12,6 +12,8 @@ It is composed of two parts:
 
 2. A Next.js UI allowing the visualization of the agent orchestration process and providing a chat interface. It uses [ChatKit](https://openai.github.io/chatkit-js/) to provide a high-quality chat interface.
 
+This fork also includes a `typescript-backend/` service with API-compatible endpoints for teams migrating backend logic from Python to TypeScript.
+
 ![Demo Screenshot](screenshot.jpg)
 
 ## How to use
@@ -65,6 +67,17 @@ python -m uvicorn main:app --reload --port 8000
 ```
 
 The backend will be available at: [http://localhost:8000](http://localhost:8000)
+
+#### Run the TypeScript backend independently
+
+From the `typescript-backend` folder, run:
+
+```bash
+npm install
+npm run dev
+```
+
+The TypeScript backend will be available at: [http://localhost:8000](http://localhost:8000)
 
 #### Run the UI & backend simultaneously
 
