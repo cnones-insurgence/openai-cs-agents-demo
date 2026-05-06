@@ -28,23 +28,15 @@ export OPENAI_API_KEY=your_api_key
 
 You can also follow [these instructions](https://platform.openai.com/docs/libraries#create-and-export-an-api-key) to set your OpenAI key at a global level.
 
-Alternatively, you can set the `OPENAI_API_KEY` environment variable in an `.env` file at the root of the `python-backend` folder. You will need to install the `python-dotenv` package to load the environment variables from the `.env` file. And then, add these lines of code to your app:
-
-```bash
-from dotenv import load_dotenv
-
-load_dotenv()
-```
+Alternatively, you can set the `OPENAI_API_KEY` environment variable in an `.env` file at the root of the `typescript-backend` folder.
 
 ### Install dependencies
 
 Install the dependencies for the backend by running the following commands:
 
 ```bash
-cd python-backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+cd typescript-backend
+npm install
 ```
 
 For the UI, you can run:
@@ -68,17 +60,6 @@ npm run dev
 ```
 
 The TypeScript backend will be available at: [http://localhost:8000](http://localhost:8000)
-
-#### Optional: run the Python backend
-
-If you want to compare behavior against the original Python implementation, you can also run:
-
-```bash
-cd python-backend
-python -m uvicorn main:app --reload --port 8000
-```
-
-The backend will be available at: [http://localhost:8000](http://localhost:8000)
 
 #### Run the UI & backend simultaneously
 

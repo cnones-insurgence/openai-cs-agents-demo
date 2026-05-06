@@ -2,8 +2,6 @@ import "dotenv/config";
 import cors from "cors";
 import express from "express";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { InputGuardrailTripwireTriggered, run, type RunItem } from "@openai/agents";
 import { agentMap } from "./airline/agents.js";
 import { createInitialContext, publicContext, type AirlineContext } from "./airline/types.js";
@@ -17,15 +15,18 @@ const app = express();
 const PORT = Number(process.env.PORT ?? 8000);
 const threads = new Map<string, ThreadState>();
 const listeners = new Map<string, Set<express.Response>>();
-const STORE_PATH = resolve(process.cwd(), ".data", "thread-state.json");
+let lastActiveThreadId: string | null = null;
 
 function ensureThread(id?: string): ThreadState {
   const threadId = id && id.length ? id : `thread_${randomUUID()}`;
   const existing = threads.get(threadId);
-  if (existing) return existing;
+  if (existing) {
+    lastActiveThreadId = existing.thread_id;
+    return existing;
+  }
   const s: ThreadState = { thread_id: threadId, created_at: new Date().toISOString(), current_agent: "Triage Agent", context: createInitialContext(), events: [], guardrails: [], input_items: [] };
   threads.set(threadId, s);
-  persistThreads();
+  lastActiveThreadId = s.thread_id;
   return s;
 }
 
@@ -50,26 +51,6 @@ function broadcast(threadId: string, payload: Record<string, unknown>) {
   clients.forEach((res) => res.write(wire));
 }
 
-function persistThreads() {
-  const dir = dirname(STORE_PATH);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  const payload = JSON.stringify(Array.from(threads.values()));
-  writeFileSync(STORE_PATH, payload, "utf8");
-}
-
-function loadThreads() {
-  if (!existsSync(STORE_PATH)) return;
-  try {
-    const raw = readFileSync(STORE_PATH, "utf8");
-    const items = JSON.parse(raw) as ThreadState[];
-    for (const item of items) {
-      threads.set(item.thread_id, item);
-    }
-  } catch {
-    // Ignore corrupt snapshots and continue with a fresh in-memory state.
-  }
-}
-
 function payload(state: ThreadState) {
   const agents = Object.values(agentMap).map((a) => ({
     name: a.name,
@@ -84,9 +65,35 @@ function payload(state: ThreadState) {
 function extractUserText(body: unknown): string {
   if (typeof body === "string") return body;
   const b = body as any;
+  const fromParams =
+    b?.params?.input?.find?.((x: any) => x?.role === "user") ??
+    b?.params?.input?.[0];
+  const fromParamsText =
+    fromParams?.content?.find?.((c: any) => c?.type === "input_text")?.text ??
+    fromParams?.content?.[0]?.text;
+  if (typeof fromParamsText === "string") return fromParamsText;
   const msg = b?.input?.find?.((x: any) => x?.role === "user");
   const text = msg?.content?.find?.((c: any) => c?.type === "input_text")?.text ?? msg?.content?.[0]?.text;
   return typeof text === "string" ? text : JSON.stringify(body);
+}
+
+function extractThreadId(queryThreadId: unknown, body: unknown): string {
+  const fromQuery = String(queryThreadId ?? "");
+  if (fromQuery.length > 0) return fromQuery;
+  const b = body as any;
+  const derived = String(
+    b?.params?.thread_id ??
+      b?.params?.threadId ??
+      b?.params?.thread?.id ??
+      b?.params?.thread?.thread_id ??
+      b?.params?.thread?.threadId ??
+      b?.thread_id ??
+      b?.threadId ??
+      ""
+  );
+  if (derived.length > 0) return derived;
+  // ChatKit may issue threads.create without a thread id; bind it to the active UI thread.
+  return String(lastActiveThreadId ?? "");
 }
 
 function maybeHydrateForHandoff(state: ThreadState, target: string) {
@@ -99,13 +106,17 @@ function maybeHydrateForHandoff(state: ThreadState, target: string) {
 app.use(cors({ origin: "http://localhost:3000", credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.text({ type: "*/*", limit: "2mb" }));
-loadThreads();
 
 app.get("/health", (_req, res) => res.json({ status: "healthy" }));
 app.get("/chatkit/bootstrap", (_req, res) => res.json(payload(ensureThread())));
-app.get("/chatkit/state", (req, res) => res.json(payload(ensureThread(String(req.query.thread_id ?? "")))));
+app.get("/chatkit/state", (req, res) => {
+  const state = ensureThread(String(req.query.thread_id ?? ""));
+  lastActiveThreadId = state.thread_id;
+  res.json(payload(state));
+});
 app.get("/chatkit/state/stream", (req, res) => {
   const state = ensureThread(String(req.query.thread_id ?? ""));
+  lastActiveThreadId = state.thread_id;
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -118,7 +129,9 @@ app.get("/chatkit/state/stream", (req, res) => {
 });
 
 app.post("/chatkit", async (req, res) => {
-  const state = ensureThread(String(req.query.thread_id ?? ""));
+  const resolvedThreadId = extractThreadId(req.query.thread_id, req.body);
+  const state = ensureThread(resolvedThreadId);
+  lastActiveThreadId = state.thread_id;
   const beforeContext = publicContext(state.context);
   const startEventIndex = state.events.length;
   const text = extractUserText(req.body).slice(0, 2000);
@@ -155,7 +168,6 @@ app.post("/chatkit", async (req, res) => {
     }
     const reply = [...state.events].reverse().find((e) => e.type === "message")?.content ?? "Done.";
     const eventsDelta = state.events.slice(startEventIndex);
-    persistThreads();
     broadcast(state.thread_id, { ...payload(state), events_delta: eventsDelta });
     return res.json({ type: "response.completed", output: [{ type: "message", content: [{ type: "output_text", text: reply }] }] });
   } catch (err) {
@@ -174,7 +186,6 @@ app.post("/chatkit", async (req, res) => {
       ];
       const blocked = "Sorry, I can only answer questions related to airline travel.";
       const ev = pushEvent(state, { type: "message", agent: state.current_agent, content: blocked });
-      persistThreads();
       broadcast(state.thread_id, { ...payload(state), events_delta: [ev] });
       return res.json({ type: "response.completed", output: [{ type: "message", content: [{ type: "output_text", text: blocked }] }] });
     }
